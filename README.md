@@ -87,7 +87,7 @@ node fix.mjs example.com --out ./fixes
 node fix.mjs jane-doe.dev --out ./fixes --type person   # auto-detected by default: person | organization | localbusiness
 
 # regression tests (zero dependencies, local fake servers)
-node --test test/
+node --test test/scan.test.mjs
 ```
 
 Exit codes: `0` scanned, `1` usage error, `2` site unreachable. An unreachable site is reported as
@@ -120,7 +120,7 @@ The table mirrors the `add(...)` calls in `scan.mjs`, which sum to 93. The weigh
 - **Committed cohort scan:** [`examples/agent-readiness-2026-10-06.html`](examples/agent-readiness-2026-10-06.html) ([CSV](examples/agent-readiness-2026-10-06.csv)), 20 sites anonymized as Site A–T. 0 of 20 sites grade C or better, the best score is 49/100, and 6 of 20 could not be read by the scanner. Full figures under [Why it matters](#why-it-matters).
 - **Live issue scan:** [issue #1](https://github.com/marsojuji-cmyk/agentready/issues/1).
 - **Quickstart output:** the `stripe.com` sample above, re-run on 2026-10-07. It scored 47/100, grade D, 44/93 points. Live sites change, so your numbers may differ.
-- Regression tests: `node --test test/` (zero dependencies, local fake servers). CodeQL code scanning and the scan-on-issue workflow run on GitHub Actions.
+- Regression tests: `node --test test/scan.test.mjs` (zero dependencies, local fake servers). CodeQL code scanning and the scan-on-issue workflow run on GitHub Actions.
 
 ## Why it matters
 
