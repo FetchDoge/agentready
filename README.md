@@ -6,7 +6,7 @@
 [![Node 18+](https://img.shields.io/badge/node-18%2B-339933.svg)](scan.mjs)
 [![scan-on-issue](https://github.com/marsojuji-cmyk/agentready/actions/workflows/scan-on-issue.yml/badge.svg)](https://github.com/marsojuji-cmyk/agentready/actions/workflows/scan-on-issue.yml)
 
-Sites without machine-readable surfaces serve agents HTML soup, so they go uncited and agents can't operate them. agentready measures that gap with 15 checks. It ships as one file with zero dependencies and needs no API keys, accounts or cloud.
+Sites without machine-readable surfaces serve agents HTML soup, so they go uncited and agents can't operate them. agentready measures that gap with 15 checks. It ships as plain Node scripts with zero dependencies and needs no API keys, accounts or cloud.
 
 ## What it guarantees
 
@@ -78,24 +78,82 @@ node scan.mjs example.com --json
 # show only the 5 biggest fixes (default: every failing check); per-request timeout in ms
 node scan.mjs example.com --top 5 --timeout 8000
 
+# white-label HTML (+ optional PDF via installed Chrome)
+node scan.mjs example.com --brand brand.json --pdf --out ./out
+
 # a cohort → ranked leaderboard + CSV
 node batch.mjs my-list.txt --out ./out --cat "Calgary plumbers"
 node batch.mjs my-list.txt --out ./out --anon   # leaderboard shows Site A, Site B, … instead of hosts
+node batch.mjs my-list.txt --out ./out --brand brand.json --pdf
 
 # the fix, not the diagnosis → tailored llms.txt + robots AI block + schema + instructions
 node fix.mjs example.com --out ./fixes
 node fix.mjs jane-doe.dev --out ./fixes --type person   # auto-detected by default: person | organization | localbusiness
+node fix.mjs example.com --out ./fixes --brand brand.json
 
 # regression tests (zero dependencies, local fake servers)
 node --test test/scan.test.mjs
 ```
 
 Exit codes: `0` scanned, `1` usage error, `2` site unreachable. An unreachable site is reported as
-`UNREACHABLE` with the DNS/TLS/connect error and is **not** given a score.
+`UNREACHABLE` with the DNS/TLS/connect error and is **not** given a score. `--pdf` with no Chrome found
+warns and still exits `0` after writing HTML and JSON.
 
 Every file check is soft-404 aware: the scanner first requests a random path that cannot exist. If the
 site answers it with `200` (a catch-all, e.g. an SPA host with no 404 page), any file whose body matches
 that page, or any HTML body served for a `.txt`/`.json`/`.xml` path, is reported as `soft-404` and fails.
+
+## White-label reports
+
+Agencies can brand scan/batch/fix output with `--brand <file.json>`. Without a brand file, HTML stays
+the default agentready look (plus print CSS). With a brand file, reports use a restrained light
+typographic layout (score and grade first, plain-language summary, honest evidence, Letter print CSS),
+`poweredBy` defaults to **false**, and brand text is HTML-escaped.
+
+```bash
+node scan.mjs client.com --brand brand.json --user-agent "Mozilla/5.0 (compatible; AcmeAudit/1.0; +https://acme.example)" --pdf
+```
+
+Example `brand.json`:
+
+```json
+{
+  "name": "Big Fox",
+  "url": "https://www.bigfox.ca",
+  "contact": "hello@example.com · 403-555-0100",
+  "logo": "./bigfox-logo.png",
+  "colors": {
+    "accent": "#ff6a00",
+    "bg": "#ffffff",
+    "card": "#f6f7f9",
+    "fg": "#111111",
+    "muted": "#5b6372",
+    "line": "#e3e6ec",
+    "good": "#1a9e5a",
+    "bad": "#d33a4c"
+  },
+  "theme": "light",
+  "reportTitle": "AI Agent Readiness Report",
+  "footer": "Prepared by Big Fox for {host}",
+  "poweredBy": false,
+  "userAgent": "Mozilla/5.0 (compatible; BigFoxAudit/1.0; +https://www.bigfox.ca)",
+  "probePrefix": "probe"
+}
+```
+
+| Field | Notes |
+|---|---|
+| `name`, `url`, `contact`, `reportTitle`, `footer` | Optional. `{host}` in `footer` is substituted. Strings are escaped in HTML |
+| `logo` | Local PNG/JPEG/SVG path only (≤ 500 KB), inlined as a `data:` URI. Remote URLs rejected |
+| `colors.*` | Hex colours (`#rgb` / `#rrggbb` / …) mapped to CSS variables |
+| `theme` | `light` (default when branding) or `dark` |
+| `poweredBy` | Default `false` with a brand file; set `true` to add “Methodology: open-source agentready (MIT)” |
+| `userAgent` | Used for all requests; must include a contact `http(s)` URL. `--user-agent` overrides |
+| `probePrefix` | Soft-404 probe path becomes `/{probePrefix}-<hex>.txt` (default `agentready-probe`) |
+
+**PDF:** Reports always include `@media print` CSS (Letter page size). `--pdf` shells out to an already-installed
+Chrome/Chromium (`AGENTREADY_CHROME` or `--chrome <path>`, then common install locations). No Puppeteer,
+no `node_modules`. If Chrome is missing, the tool warns and still writes HTML + JSON.
 
 ## What it checks: 15 signals, 93 weighted points
 
@@ -162,7 +220,7 @@ Scores also move day to day: one site that blocked the scanner on Oct 4 scored 4
 ## Design constraints
 
 - **Zero dependencies.** No `node_modules`, no lockfile, no supply chain. Global `fetch` only.
-- **One file, readable in a sitting.** You can audit every claim it makes about your site.
+- **Readable in a sitting.** `scan.mjs` plus a small shared `brand.mjs` for white-label/PDF helpers — you can audit every claim.
 - **Evidence, not vibes.** Every check prints the URL it hit and the status it got back.
 - **Soft-404 aware.** A 200 that returns HTML is not a passing `llms.txt`.
 
