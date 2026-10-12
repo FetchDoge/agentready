@@ -44,7 +44,9 @@ const LOGO_MIME = {
   '.svg': 'image/svg+xml',
 };
 
-export const escHtml = (s) => String(s).replace(/[<>&]/g, (m) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[m]));
+export const escHtml = (s) => String(s).replace(/[<>&"']/g, (m) => ({
+  '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;',
+}[m]));
 
 /** Default brand = today's agentready look (dark theme, attribution on). */
 export const DEFAULT_BRAND = Object.freeze({
