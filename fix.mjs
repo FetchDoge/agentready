@@ -10,20 +10,33 @@
  * emitted as an explicit `TODO`. Unfilled TODOs are the honest output, not a bug.
  *
  * Usage: node fix.mjs <url> --out <dir> [--type auto|person|organization|localbusiness]
+ *                   [--brand <file.json>] [--user-agent <ua>]
  */
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
+import { loadBrand, resolveUserAgent } from './brand.mjs';
 
 const args = process.argv.slice(2);
 const flag = (name, dflt) => { const i = args.indexOf(name); return i !== -1 && args[i + 1] ? args[i + 1] : dflt; };
-const valued = new Set(['--out', '--type']);
+const valued = new Set(['--out', '--type', '--brand', '--user-agent']);
 const target = args.find((a, i) => !a.startsWith('--') && !valued.has(args[i - 1]));
-if (!target) { console.error('usage: node fix.mjs <url> --out <dir> [--type auto|person|organization|localbusiness]'); process.exit(1); }
+if (!target) { console.error('usage: node fix.mjs <url> --out <dir> [--type auto|person|organization|localbusiness] [--brand <file.json>] [--user-agent <ua>]'); process.exit(1); }
 const TYPE_FLAG = flag('--type', 'auto').toLowerCase();
 if (!['auto', 'person', 'organization', 'localbusiness'].includes(TYPE_FLAG)) { console.error('--type must be auto, person, organization or localbusiness'); process.exit(1); }
 
-const UA = 'Mozilla/5.0 (compatible; AgentReadyBot/1.0)';
+let brand;
+try { brand = loadBrand(flag('--brand', null)); }
+catch (e) { console.error(e.message); process.exit(1); }
+// fix.mjs historically used a shorter default UA (no contact URL). Keep that when unbranded;
+// brand.userAgent / --user-agent still go through contact-URL validation.
+let UA;
+try {
+  if (flag('--user-agent', null)) UA = resolveUserAgent(flag('--user-agent', null), brand);
+  else if (brand.fromFile) UA = resolveUserAgent(null, brand);
+  else UA = 'Mozilla/5.0 (compatible; AgentReadyBot/1.0)';
+} catch (e) { console.error(e.message); process.exit(1); }
+const probePrefix = brand.probePrefix;
 const BROWSER = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 let origin, host;
 try {
@@ -92,7 +105,7 @@ const name = (title || h1 || host).split(/\s[|\-–—·]\s/)[0].trim();
 const titleRest = (title || '').split(/\s[|\-–—·]\s/).slice(1).join(' — ').trim() || null;
 
 // catch-all probe so soft-404 pages are never mistaken for real pages or files
-const probe = await get(`${origin}/agentready-probe-${randomBytes(6).toString('hex')}`);
+const probe = await get(`${origin}/${probePrefix}-${randomBytes(6).toString('hex')}`);
 const norm = (s) => s.replace(/data-cfemail="[0-9a-f]+"|email-protection#[0-9a-f]+|nonce="[^"]*"|\b[0-9a-f]{16,}\b/gi, '').replace(/\s+/g, ' ').trim();
 const catchAllSig = probe.ok ? norm(probe.text) : null;
 const isSoft404 = (r) => !r.ok || (catchAllSig && norm(r.text) === catchAllSig);
@@ -323,7 +336,7 @@ node scan.mjs ${origin}
 A move to C-or-better (62/100 or above) is the acceptance test. If the score does
 not move, the files did not deploy — check content-type on \`/llms.txt\`
 (it must serve as \`text/plain\`, not an HTML error page).
-`;
+${brand.fromFile ? `\n---\n${brand.footer ? brand.footer.replace(/\{host\}/g, host) : (brand.name ? `Prepared by ${brand.name}` : '')}${brand.poweredBy ? '\nMethodology: open-source agentready (MIT)' : ''}\n` : ''}`;
 
 writeFileSync(join(outDir, 'llms.txt'), llms);
 writeFileSync(join(outDir, 'robots-ai-block.txt'), robots);

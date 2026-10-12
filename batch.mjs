@@ -2,6 +2,7 @@
 /**
  * agentready batch — scan a list of domains, emit a ranked leaderboard.
  * Zero dependencies. Usage: node batch.mjs <list.txt> [--out <dir>] [--cat "Calgary plumbers"] [--anon]
+ *                          [--brand <file.json>] [--user-agent <ua>] [--pdf] [--chrome <path>]
  * list.txt = one URL/domain per line; blank lines and #comments ignored.
  *
  * Every listed site appears in the leaderboard, including ones that could not be scanned (UNREACHABLE)
@@ -14,14 +15,30 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
+import {
+  loadBrand, resolveUserAgent, escHtml, printCss, footerText, maybeWritePdf, LIGHT_COLORS,
+} from './brand.mjs';
 
 const args = process.argv.slice(2);
-const listFile = args.find((a) => !a.startsWith('--'));
-const outIdx = args.indexOf('--out');
-const outDir = outIdx !== -1 ? args[outIdx + 1] : join(process.cwd(), 'agentready-out');
-const catIdx = args.indexOf('--cat');
-const category = catIdx !== -1 ? args[catIdx + 1] : 'the cohort';
+const valued = new Set(['--out', '--cat', '--brand', '--user-agent', '--chrome']);
+const listFile = args.find((a, i) => !a.startsWith('--') && !valued.has(args[i - 1]));
+if (!listFile) {
+  console.error('usage: node batch.mjs <list.txt> [--out <dir>] [--cat "label"] [--anon] [--brand <file.json>] [--user-agent <ua>] [--pdf] [--chrome <path>]');
+  process.exit(1);
+}
+const flag = (name, dflt) => { const i = args.indexOf(name); return i !== -1 && args[i + 1] ? args[i + 1] : dflt; };
+const outDir = flag('--out', join(process.cwd(), 'agentready-out'));
+const category = flag('--cat', 'the cohort');
 const anon = args.includes('--anon');
+const wantPdf = args.includes('--pdf');
+const chromeFlag = flag('--chrome', null);
+
+let brand;
+try { brand = loadBrand(flag('--brand', null)); }
+catch (e) { console.error(e.message); process.exit(1); }
+let UA;
+try { UA = resolveUserAgent(flag('--user-agent', null), brand); }
+catch (e) { console.error(e.message); process.exit(1); }
 
 const lines = readFileSync(listFile, 'utf8')
   .split('\n').map((l) => l.trim())
@@ -30,10 +47,18 @@ const lines = readFileSync(listFile, 'utf8')
 mkdirSync(outDir, { recursive: true });
 const rows = [];
 
+const childExtra = [];
+const brandPath = flag('--brand', null);
+if (brandPath) childExtra.push('--brand', brandPath);
+const uaFlag = flag('--user-agent', null);
+if (uaFlag) childExtra.push('--user-agent', uaFlag);
+if (wantPdf) childExtra.push('--pdf');
+if (chromeFlag) childExtra.push('--chrome', chromeFlag);
+
 for (const target of lines) {
   let r;
   try {
-    const raw = execFileSync(process.execPath, [join(import.meta.dirname, 'scan.mjs'), target, '--json', '--out', outDir], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
+    const raw = execFileSync(process.execPath, [join(import.meta.dirname, 'scan.mjs'), target, '--json', '--out', outDir, ...childExtra], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
     r = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
   } catch (e) {
     console.error(`  ! ${target} — ${String(e.message).slice(0, 120)}`);
@@ -86,7 +111,65 @@ const rowsHtml = live.map((r, i) => `
       <td class="gaps"><b>${esc(note(r))}</b></td>
     </tr>`).join('');
 
-const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+const branded = brand.fromFile;
+const col = brand.colors;
+const uaLabel = UA.replace(/</g, '');
+const brandFoot = branded ? footerText(brand, category) : null;
+const brandFootHtml = brandFoot
+  ? `<div class="foot">${escHtml(brandFoot).replace(/\u00a0/g, '&nbsp;')}</div>`
+  : '';
+
+let html;
+if (branded) {
+  const logo = brand.logoDataUri
+    ? `<img class="brand-mark" src="${brand.logoDataUri}" alt="${escHtml(brand.name)}" />`
+    : (brand.name ? `<div class="brand-mark-text">${escHtml(brand.name)}</div>` : '');
+  const plain = `${cOrBetter} of ${rows.length} grade C or better. Best ${best ? best.score : 'n/a'}/100. Mean of ${live.length} scored: ${mean}.`;
+  html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escHtml(brand.reportTitle)} — ${esc(category)} (${isoDate})</title>
+<style>
+  :root{--bg:${col.bg};--fg:${col.fg};--mut:${col.muted};--line:${col.line};--good:${col.good};--mid:${col.mid || '#b45309'};--bad:${col.bad};--acc:${col.accent}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 "Helvetica Neue",Helvetica,Arial,sans-serif;padding:48px 28px}
+  .wrap{max-width:840px;margin:0 auto}
+  .brand-mark{display:block;max-height:40px;max-width:180px;margin:0 0 28px}
+  .brand-mark-text{font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin:0 0 28px}
+  h1{font-size:22px;font-weight:700;margin:0 0 8px;letter-spacing:-.01em}
+  .sub{color:var(--mut);font-size:13px;margin:0 0 28px}
+  .scoreboard{margin:0 0 32px;padding:0 0 24px;border-bottom:1px solid var(--line)}
+  .scoreboard .num{font-size:48px;font-weight:700;line-height:1;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+  .scoreboard .plain{margin:10px 0 0;font-size:16px;font-weight:500}
+  .scoreboard .detail{margin:6px 0 0;color:var(--mut);font-size:13px}
+  table{width:100%;border-collapse:collapse;font-size:14px;margin:0 0 28px}
+  th,td{text-align:left;padding:10px 10px 10px 0;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);font-weight:700;padding-top:0}
+  .rank{width:2em;color:var(--mut)}
+  .score{font-weight:700;font-variant-numeric:tabular-nums;width:3em}
+  .score.good{color:var(--good)} .score.mid{color:var(--mid)} .score.bad{color:var(--bad)}
+  .grade{width:2.5em;color:var(--mut)}
+  .flag{width:2.5em;text-align:left;color:var(--mut)}
+  .gaps{color:var(--mut);font-size:12px;word-break:break-word}
+  .host{font-weight:600}
+  .foot{margin-top:16px;padding-top:16px;border-top:1px solid var(--line);color:var(--mut);font-size:12px}
+  ${printCss(col)}
+</style></head><body><div class="wrap">
+  ${logo}
+  <h1>${escHtml(brand.reportTitle)} — ${esc(category)}</h1>
+  <div class="sub">${rows.length} sites · scanned ${isoDate} · ${live.length} scored, ${dead.length} unreachable · ${notReadable} not readable</div>
+  <section class="scoreboard">
+    <div class="num">${cOrBetter}<span style="font-size:18px;font-weight:400;color:var(--mut)"> / ${rows.length}</span></div>
+    <p class="plain">${plain}</p>
+    <p class="detail">${withLlms} publish llms.txt · ${withJsonld} have structured data · prepared by ${escHtml(brand.name || 'agency')}</p>
+  </section>
+  <table><thead><tr><th></th><th>Site</th><th>Score</th><th>Gr</th><th>llms</th><th>ld+json</th><th>Top gaps</th></tr></thead>
+  <tbody>${rowsHtml}</tbody></table>
+  <div class="foot">Method: one pass of <code>node batch.mjs</code> (user-agent ${esc(uaLabel)}, soft-404 aware). 93 weighted points; grades A&nbsp;90+ · B&nbsp;78+ · C&nbsp;62+ · D&nbsp;45+ · E&nbsp;25+ · F.
+    "Not readable" = homepage did not return 200 to the scanner. Mean of the ${readable.length} readable sites: ${readableMean}.</div>
+  ${brandFootHtml}
+</div></body></html>`;
+} else {
+  html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AI Agent Readiness — ${esc(category)} (${isoDate})</title>
 <style>
@@ -112,6 +195,7 @@ const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
   .gaps{color:var(--mut);font-size:12px}
   .host{font-weight:600}
   .foot{margin-top:20px;color:var(--mut);font-size:12px}
+  ${printCss(LIGHT_COLORS)}
 </style></head><body><div class="wrap">
   <h1>AI Agent Readiness — ${esc(category)}</h1>
   <div class="sub">${rows.length} sites listed · scanned ${isoDate} · ${live.length} scored, ${dead.length} unreachable · ${notReadable} of ${rows.length} could not be read by the scanner · 15 machine-readability checks · generated by agentready</div>
@@ -128,11 +212,14 @@ const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
     "Not readable" = the homepage did not return 200 to the scanner (bot wall, no site connected, error page); those sites are scored on what an agent actually received. Mean of the ${readable.length} readable sites: ${readableMean}.</div>
   <div class="foot">Checked: llms.txt · llms-full.txt · ai.txt · AI crawler rules · sitemap · JSON-LD · schema types · OpenAPI · MCP manifest · markdown negotiation · security.txt · OpenGraph meta · agent hint files</div>
 </div></body></html>`;
+}
 
-writeFileSync(join(outDir, 'leaderboard.html'), html);
+const htmlPath = join(outDir, 'leaderboard.html');
+writeFileSync(htmlPath, html);
 writeFileSync(join(outDir, 'leaderboard.csv'),
   'rank,host,score,grade,earned,total,llms_txt,json_ld,top_gap,response_ms,home_status,readable\n' +
   [...live.map((r, i) => [i + 1, r.shown, r.score, r.grade, ...r.pts.split('/'), r.llms ? 1 : 0, r.jsonld ? 1 : 0, `"${r.gaps[0] || ''}"`, r.ms, r.home, r.readable ? 1 : 0].join(',')),
     ...dead.map((r) => ['', r.shown, '', 'N/A', '', '', '', '', '"UNREACHABLE"', '', 0, 0].join(','))].join('\n') + '\n');
 
-console.log(`\n  ${rows.length} listed · ${live.length} scored · ${dead.length} unreachable · ${notReadable} not readable · ${cOrBetter} of ${rows.length} C or better · best ${best ? best.score : 'n/a'} · mean ${mean}/100 (readable-only ${readableMean}) · wrote ${join(outDir, 'leaderboard.html')}`);
+console.log(`\n  ${rows.length} listed · ${live.length} scored · ${dead.length} unreachable · ${notReadable} not readable · ${cOrBetter} of ${rows.length} C or better · best ${best ? best.score : 'n/a'} · mean ${mean}/100 (readable-only ${readableMean}) · wrote ${htmlPath}`);
+await maybeWritePdf({ wantPdf, chromeFlag, htmlPath, pdfPath: join(outDir, 'leaderboard.pdf'), label: 'The leaderboard HTML' });
