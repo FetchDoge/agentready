@@ -271,7 +271,7 @@ test('no brand: HTML keeps agentready footer and print CSS; JSON records default
     assert.match(html, /--bg:#0b0d12/);
     const json = JSON.parse(r.stdout);
     assert.match(json.userAgent, /AgentReadyBot\/1\.0/);
-    assert.match(json.userAgent, /https:\/\/github\.com\/marsojuji-cmyk\/agentready/);
+    assert.match(json.userAgent, /https:\/\/github\.com\/FetchDoge\/agentready/);
   } finally { await s.close(); }
 });
 
