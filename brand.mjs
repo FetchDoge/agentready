@@ -7,7 +7,7 @@ import { resolve, extname, isAbsolute, join as pathJoin } from 'node:path';
 import { execFile, execFileSync } from 'node:child_process';
 import { platform, tmpdir } from 'node:os';
 
-export const DEFAULT_UA = 'Mozilla/5.0 (compatible; AgentReadyBot/1.0; +https://github.com/marsojuji-cmyk/agentready)';
+export const DEFAULT_UA = 'Mozilla/5.0 (compatible; AgentReadyBot/1.0; +https://github.com/FetchDoge/agentready)';
 export const DEFAULT_PROBE_PREFIX = 'agentready-probe';
 export const LOGO_MAX_BYTES = 500 * 1024;
 
@@ -52,7 +52,7 @@ export const escHtml = (s) => String(s).replace(/[<>&"']/g, (m) => ({
 export const DEFAULT_BRAND = Object.freeze({
   fromFile: false,
   name: 'agentready',
-  url: 'https://github.com/marsojuji-cmyk/agentready',
+  url: 'https://github.com/FetchDoge/agentready',
   contact: null,
   logoDataUri: null,
   colors: { ...DARK_COLORS },
