@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node 18+](https://img.shields.io/badge/node-18%2B-339933.svg)](scan.mjs)
-[![scan-on-issue](https://github.com/marsojuji-cmyk/agentready/actions/workflows/scan-on-issue.yml/badge.svg)](https://github.com/marsojuji-cmyk/agentready/actions/workflows/scan-on-issue.yml)
+[![scan-on-issue](https://github.com/FetchDoge/agentready/actions/workflows/scan-on-issue.yml/badge.svg)](https://github.com/FetchDoge/agentready/actions/workflows/scan-on-issue.yml)
 
 Sites without machine-readable surfaces serve agents HTML soup, so they go uncited and agents can't operate them. agentready measures that gap with 15 checks. It ships as plain Node scripts with zero dependencies and needs no API keys, accounts or cloud.
 
@@ -19,7 +19,7 @@ Sites without machine-readable surfaces serve agents HTML soup, so they go uncit
 ## Quickstart
 
 ```bash
-git clone https://github.com/marsojuji-cmyk/agentready && cd agentready
+git clone https://github.com/FetchDoge/agentready && cd agentready
 node scan.mjs stripe.com
 ```
 
@@ -61,10 +61,10 @@ The scan writes a standalone HTML report and a JSON record to `./agentready-out/
 ## Try it without installing anything
 
 Open an issue titled **"Scan my site"** with a URL in the body —
-[**click here**](https://github.com/marsojuji-cmyk/agentready/issues/new?title=Scan%20my%20site&body=My%20website%20is%3A%20https%3A%2F%2F)
+[**click here**](https://github.com/FetchDoge/agentready/issues/new?title=Scan%20my%20site&body=My%20website%20is%3A%20https%3A%2F%2F)
 — and a GitHub Action scans the site and posts the full report as a comment.
 No backend, no signup, no API key. See a live one:
-[issue #1](https://github.com/marsojuji-cmyk/agentready/issues/1).
+[issue #1](https://github.com/FetchDoge/agentready/issues/1).
 
 ## Usage
 
@@ -176,7 +176,7 @@ The table mirrors the `add(...)` calls in `scan.mjs`, which sum to 93. The weigh
 ## Evidence
 
 - **Committed cohort scan:** [`examples/agent-readiness-2026-10-06.html`](examples/agent-readiness-2026-10-06.html) ([CSV](examples/agent-readiness-2026-10-06.csv)), 20 sites anonymized as Site A–T. 0 of 20 sites grade C or better, the best score is 49/100, and 6 of 20 could not be read by the scanner. Full figures under [Why it matters](#why-it-matters).
-- **Live issue scan:** [issue #1](https://github.com/marsojuji-cmyk/agentready/issues/1).
+- **Live issue scan:** [issue #1](https://github.com/FetchDoge/agentready/issues/1).
 - **Quickstart output:** the `stripe.com` sample above, re-run on 2026-10-07. It scored 47/100, grade D, 44/93 points. Live sites change, so your numbers may differ.
 - Regression tests: `node --test test/scan.test.mjs` (zero dependencies, local fake servers). CodeQL code scanning and the scan-on-issue workflow run on GitHub Actions.
 
