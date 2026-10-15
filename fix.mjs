@@ -19,11 +19,13 @@ import { loadBrand, resolveUserAgent } from './brand.mjs';
 
 const args = process.argv.slice(2);
 const flag = (name, dflt) => { const i = args.indexOf(name); return i !== -1 && args[i + 1] ? args[i + 1] : dflt; };
-const valued = new Set(['--out', '--type', '--brand', '--user-agent']);
+const valued = new Set(['--out', '--type', '--brand', '--user-agent', '--robots-mode']);
 const target = args.find((a, i) => !a.startsWith('--') && !valued.has(args[i - 1]));
-if (!target) { console.error('usage: node fix.mjs <url> --out <dir> [--type auto|person|organization|localbusiness] [--brand <file.json>] [--user-agent <ua>]'); process.exit(1); }
+if (!target) { console.error('usage: node fix.mjs <url> --out <dir> [--type auto|person|organization|localbusiness] [--robots-mode search|all] [--brand <file.json>] [--user-agent <ua>]'); process.exit(1); }
 const TYPE_FLAG = flag('--type', 'auto').toLowerCase();
 if (!['auto', 'person', 'organization', 'localbusiness'].includes(TYPE_FLAG)) { console.error('--type must be auto, person, organization or localbusiness'); process.exit(1); }
+const ROBOTS_MODE = flag('--robots-mode', 'search').toLowerCase();
+if (!['search', 'all'].includes(ROBOTS_MODE)) { console.error('--robots-mode must be search or all'); process.exit(1); }
 
 let brand;
 try { brand = loadBrand(flag('--brand', null)); }
@@ -193,17 +195,52 @@ ${[origin + '/', ...pages.map((p) => p.url)].map((u) => `  <url><loc>${u.replace
 </urlset>
 `;
 
-const robots = `# --- AI agent crawlers (${robotsExists ? 'append to your existing robots.txt' : 'your site has no robots.txt yet: save this as /robots.txt'}) ---
-# Allow = you want these assistants to read and cite your site.
-# Change to Disallow if you want to opt out of that crawler entirely.
-${robotsExists ? '' : '\nUser-agent: *\nAllow: /\n'}
-User-agent: GPTBot
-Allow: /
+const robotsHeader = `# --- AI agent crawlers (${robotsExists ? 'append to your existing robots.txt' : 'your site has no robots.txt yet: save this as /robots.txt'}) ---
+# Mode: ${ROBOTS_MODE === 'search' ? 'search-optimized (citations in ChatGPT, Claude and Perplexity; training scrapers disallowed)' : 'all (both search indexing and AI training allowed)'}
+${robotsExists ? '' : '\nUser-agent: *\nAllow: /\n'}`;
 
+const robotsBody = ROBOTS_MODE === 'search'
+  ? `# 1. AI Search & Citation crawlers — ALLOWED so assistants cite and link your business
 User-agent: OAI-SearchBot
 Allow: /
 
 User-agent: ChatGPT-User
+Allow: /
+
+User-agent: Claude-SearchBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+# 2. AI Model Training & Bulk Scrapers — DISALLOWED (opt out of training without sacrificing search visibility)
+User-agent: GPTBot
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+# Google-Extended controls Gemini training/grounding. Google Search / AI Overviews use Googlebot.
+User-agent: Google-Extended
+Disallow: /`
+  : `# AI Search & Citation crawlers
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: Claude-SearchBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+# AI Model Training & Bulk Scrapers
+User-agent: GPTBot
 Allow: /
 
 User-agent: ClaudeBot
@@ -212,16 +249,15 @@ Allow: /
 User-agent: Claude-User
 Allow: /
 
-User-agent: PerplexityBot
-Allow: /
-
 User-agent: CCBot
 Allow: /
 
 # Google-Extended controls Gemini grounding AND training on your content.
-# Allow = you get cited in Gemini answers. Disallow = you opt out of training.
 User-agent: Google-Extended
-Allow: /
+Allow: /`;
+
+const robots = `${robotsHeader}
+${robotsBody}
 
 ${sitemapExists ? `Sitemap: ${origin}/sitemap.xml` : `# Your site has no sitemap.xml yet. Upload sitemap.xml from this pack, then uncomment:\n# Sitemap: ${origin}/sitemap.xml`}
 `;
@@ -306,6 +342,7 @@ ${llms}\`\`\`
 ## 2. \`robots.txt\` → ${robotsExists ? `append to the existing file at \`${origin}/robots.txt\`` : `create \`${origin}/robots.txt\` (none exists today${robotsRes.ok ? '; that URL currently returns an HTML page' : ''})`}
 
 ${robotsExists ? 'Append, **do not replace** — the existing rules may be load-bearing.' : 'Serve it as `text/plain`.'}
+Mode: **${ROBOTS_MODE === 'search' ? 'Search-first' : 'All crawlers'}** (${ROBOTS_MODE === 'search' ? 'search & citation crawlers allowed; bulk training scrapers disallowed' : 'both search and training crawlers allowed'}). Re-run with \`--robots-mode ${ROBOTS_MODE === 'search' ? 'all' : 'search'}\` to change policy.
 
 \`\`\`
 ${robots}\`\`\`
@@ -346,7 +383,7 @@ writeFileSync(join(outDir, 'FIX.md'), fix);
 
 console.log(`  fix pack → ${outDir}`);
 console.log(`    llms.txt              ${llms.length} bytes, ${pages.length} pages, ${todos} TODOs remaining`);
-console.log(`    robots-ai-block.txt   ${robots.split('\n').length} lines (${robotsExists ? 'append' : 'new file'})`);
+console.log(`    robots-ai-block.txt   ${robots.split('\n').length} lines (${robotsExists ? 'append' : 'new file'}, mode: ${ROBOTS_MODE})`);
 if (!sitemapExists) console.log(`    sitemap.xml           ${pages.length + 1} URLs (site has none)`);
 console.log(`    schema.jsonld.html    ${schemaType} skeleton (${typeWhy})`);
 console.log(`    FIX.md                placement + verification instructions`);
