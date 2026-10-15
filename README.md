@@ -228,6 +228,8 @@ Scores also move day to day: one site that blocked the scanner on Oct 4 scored 4
 
 Working tool, early. The single-site scanner and the issue bot run in production on this repo. The weights are opinionated and open to argument.
 
+Built by Marcus Richards, directing AI coding agents.
+
 ## License
 
 MIT.
