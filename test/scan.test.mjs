@@ -195,6 +195,8 @@ test('fix.mjs: Person schema, clean URLs, decoded Cloudflare email, no email-pro
     const robots = readFileSync(join(dir, 'robots-ai-block.txt'), 'utf8');
     assert.match(schema, /"@type": "Person"/);
     assert.match(schema, /"jobTitle": "Agent Systems Engineer"/);
+    assert.match(schema, /<link rel="alternate" type="text\/markdown"/);
+    assert.match(schema, /<link rel="describedby"/);
     assert.doesNotMatch(schema, /LocalBusiness|telephone|openingHours/);
     assert.match(llms, new RegExp(`\\[Widget — Agent safety\\]\\(${s.url}/widget\\): Widget: leases for agents\\.`), llms);
     assert.doesNotMatch(llms, /\.html\)|cdn-cgi|email.{0,10}protected/);
@@ -237,3 +239,58 @@ test('batch.mjs: every listed site is counted; unreachable and not-readable site
     assert.match(anonHtml, /Site A[\s\S]*Site B[\s\S]*Site C/);
   } finally { await ok.close(); await walled.close(); }
 });
+
+test('markdown: passes via <link rel="alternate" type="text/markdown"> when content negotiation is absent, fails on broken link', async () => {
+  // Static site that returns HTML even if Accept: text/markdown is sent, but exposes a markdown alternate tag
+  const homeHtml = '<!doctype html><html><head><title>Static Docs</title><link rel="alternate" type="text/markdown" href="/docs.md"><meta name="description" content="A static documentation page with markdown alternate."></head><body><h1>Docs</h1></body></html>';
+  const s = await serve((req, res) => {
+    const p = new URL(req.url, 'http://x').pathname;
+    if (p === '/') return send(res, 200, 'text/html; charset=utf-8', homeHtml);
+    if (p === '/docs.md') return send(res, 200, 'text/markdown; charset=utf-8', '# Static Docs\nFull markdown content for AI agents.\n');
+    return send(res, 404, 'text/plain', 'nope');
+  });
+  try {
+    const r = await scanJson(s.url);
+    assert.equal(r.code, 0);
+    const c = check(r, 'markdown');
+    assert.equal(c.pass, true, 'markdown check must pass via <link rel="alternate">');
+    assert.match(c.evidence, /<link rel="alternate" type="text\/markdown"/);
+  } finally { await s.close(); }
+
+  // Negative control: site points to a broken or 404 markdown alternate
+  const brokenHtml = '<!doctype html><html><head><title>Broken Docs</title><link rel="alternate" type="text/markdown" href="/missing.md"><meta name="description" content="A static page with a broken markdown link."></head><body><h1>Broken</h1></body></html>';
+  const brokenS = await serve((req, res) => {
+    const p = new URL(req.url, 'http://x').pathname;
+    if (p === '/') return send(res, 200, 'text/html; charset=utf-8', brokenHtml);
+    return send(res, 404, 'text/plain', 'nope');
+  });
+  try {
+    const r = await scanJson(brokenS.url);
+    assert.equal(r.code, 0);
+    const c = check(r, 'markdown');
+    assert.equal(c.pass, false, 'markdown check must fail when alternate link 404s');
+    assert.match(c.evidence, /404/);
+  } finally { await brokenS.close(); }
+
+  // HTTP Link header discovery (llms.txt v2)
+  const linkS = await serve((req, res) => {
+    const p = new URL(req.url, 'http://x').pathname;
+    if (p === '/') {
+      res.writeHead(200, {
+        'content-type': 'text/html; charset=utf-8',
+        'link': '</raw.md>; rel="alternate"; type="text/markdown"',
+      });
+      return res.end('<!doctype html><html><head><title>Link Header</title><meta name="description" content="A page with Link header."></head><body>Hi</body></html>');
+    }
+    if (p === '/raw.md') return send(res, 200, 'text/markdown', '# Raw\nFrom Link header\n');
+    return send(res, 404, 'text/plain', 'nope');
+  });
+  try {
+    const r = await scanJson(linkS.url);
+    assert.equal(r.code, 0);
+    const c = check(r, 'markdown');
+    assert.equal(c.pass, true, 'markdown check must pass via Link header');
+    assert.match(c.evidence, /Link header/);
+  } finally { await linkS.close(); }
+});
+

@@ -106,7 +106,7 @@ that page, or any HTML body served for a `.txt`/`.json`/`.xml` path, is reported
 | 10 | robots.txt has an explicit `User-agent` group for at least one AI crawler (GPTBot, ClaudeBot, PerplexityBot, Google-Extended, …). Allow **or** Disallow counts; evidence lists which are allowed and which are blocked; comment-only mentions do not count |
 | 8 | OpenAPI / Swagger spec discoverable |
 | 8 | Agent manifest (`/.well-known/mcp.json`, `ai-plugin.json`, …) |
-| 8 | Markdown content negotiation (`Accept: text/markdown`) |
+| 8 | Markdown alternate or content negotiation (`Accept: text/markdown`, `<link rel="alternate" type="text/markdown">`, or HTTP `Link:` header per `llms.txt` v2) |
 | 5 | `sitemap.xml` reachable |
 | 5 | High-value schema types (Organization, LocalBusiness, Product, FAQPage, Article, Person, ProfilePage, SoftwareSourceCode, …) |
 | 5 | OpenGraph + meta description |

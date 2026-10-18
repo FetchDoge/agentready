@@ -215,8 +215,13 @@ ${sitemapExists ? `Sitemap: ${origin}/sitemap.xml` : `# Your site has no sitemap
 
 const addressParts = jsonld.address || {};
 const Q = (v, fallback = '"TODO"') => (v ? JSON.stringify(v) : fallback);
+const headDiscovery = `<!-- AI agent discovery (llms.txt v2) -->
+<link rel="alternate" type="text/markdown" href="${origin}/llms.txt">
+<link rel="describedby" href="${origin}/llms.txt">
+
+`;
 const schemas = {
-  Person: `<script type="application/ld+json">
+  Person: `${headDiscovery}<script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "Person",
@@ -230,7 +235,7 @@ const schemas = {
 }
 </script>
 `,
-  Organization: `<script type="application/ld+json">
+  Organization: `${headDiscovery}<script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "Organization",
@@ -243,7 +248,7 @@ const schemas = {
 }
 </script>
 `,
-  LocalBusiness: `<script type="application/ld+json">
+  LocalBusiness: `${headDiscovery}<script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "LocalBusiness",

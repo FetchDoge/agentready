@@ -33,10 +33,11 @@ async function get(url, headers = {}) {
     return {
       ok: res.ok, status: res.status, finalUrl: res.url, text,
       ct: (res.headers.get('content-type') || '').toLowerCase(),
+      link: (res.headers.get('link') || '').toLowerCase(),
       ms: Date.now() - t0, err: null,
     };
   } catch (e) {
-    return { ok: false, status: 0, finalUrl: url, text: '', ct: '', ms: Date.now() - t0, err: errText(e) };
+    return { ok: false, status: 0, finalUrl: url, text: '', ct: '', link: '', ms: Date.now() - t0, err: errText(e) };
   }
 }
 
@@ -128,6 +129,33 @@ function robotsPolicy(text, bots) {
     if (g) named[b] = verdict(g);
   }
   return { named, wildcard, groups: groups.length };
+}
+
+// Finds Markdown alternate link via HTML <link rel="alternate" type="text/markdown" href="..."> or HTTP Link header
+function findMarkdownAlternate(html, linkHeader = '') {
+  if (linkHeader) {
+    for (const part of linkHeader.split(',')) {
+      if (/\brel=["']?alternate["']?/i.test(part) && /\btype=["']?text\/markdown["']?/i.test(part)) {
+        const m = part.match(/<([^>]+)>/);
+        if (m) return { href: m[1].trim(), source: 'Link header' };
+      }
+    }
+  }
+  if (html) {
+    for (const tag of html.match(/<link\b[^>]*>/gi) || []) {
+      const a = {};
+      for (const m of tag.matchAll(/([a-z:-]+)\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/gi)) {
+        a[m[1].toLowerCase()] = (m[3] ?? m[4] ?? m[5] ?? '').trim();
+      }
+      const rels = (a.rel || '').toLowerCase().split(/\s+/);
+      const isAlt = rels.includes('alternate');
+      const isMd = (a.type || '').toLowerCase().startsWith('text/markdown');
+      if (isAlt && isMd && a.href) {
+        return { href: a.href, source: '<link rel="alternate" type="text/markdown">' };
+      }
+    }
+  }
+  return null;
 }
 
 async function scan(rawUrl) {
@@ -262,9 +290,30 @@ async function scan(rawUrl) {
   }
   add('mcp', 'Agent/MCP manifest present', 8, !!mcpHit, mcpHit ? mcpHit.evidence : 'not found: ' + mcpMiss.join('; '));
 
-  // 12. Markdown content negotiation (text/plain only counts when the body is not HTML)
+  // 12. Markdown content negotiation or alternate discovery (llms.txt v2)
   const mdServed = mdProbe.ok && (mdProbe.ct.includes('text/markdown') || (mdProbe.ct.includes('text/plain') && !looksHtml(mdProbe.text)));
-  add('markdown', 'Markdown content negotiation', 8, mdServed, `Accept: text/markdown → content-type: ${mdProbe.ct || 'n/a'} (${mdProbe.status})`);
+  let mdPass = mdServed;
+  let mdEvidence = `Accept: text/markdown → content-type: ${mdProbe.ct || 'n/a'} (${mdProbe.status})`;
+
+  if (!mdPass) {
+    const alt = findMarkdownAlternate(home.text, home.link || mdProbe.link);
+    if (alt) {
+      try {
+        const altUrl = new URL(alt.href, origin).href;
+        const altProbe = await get(altUrl);
+        const altRes = fileCheck(altUrl, altProbe, 'text', (t) => t.trim().length > 10 && !looksHtml(t));
+        if (altRes.pass) {
+          mdPass = true;
+          mdEvidence = `${alt.source} → ${altUrl} (${altProbe.text.trim().length} bytes markdown)`;
+        } else {
+          mdEvidence = `${alt.source} found but failed: ${altRes.evidence}; Accept: text/markdown → ${mdProbe.ct || 'n/a'} (${mdProbe.status})`;
+        }
+      } catch {
+        mdEvidence = `${alt.source} has invalid URL: ${alt.href}; Accept: text/markdown → ${mdProbe.ct || 'n/a'} (${mdProbe.status})`;
+      }
+    }
+  }
+  add('markdown', 'Markdown content negotiation', 8, mdPass, mdEvidence);
 
   // 13. security.txt
   const sec = await get(origin + '/.well-known/security.txt');
