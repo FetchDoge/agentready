@@ -168,8 +168,12 @@ no `node_modules`. If Chrome is missing, the tool warns and still writes HTML + 
 | 5 | `sitemap.xml` reachable |
 | 5 | High-value schema types (Organization, LocalBusiness, Product, FAQPage, Article, Person, ProfilePage, SoftwareSourceCode, …) |
 | 5 | OpenGraph + meta description |
-| 4 | HTTPS (a real TLS connection), `llms-full.txt` |
-| 3 | `ai.txt`, `security.txt`, agent hint files, sitemap declared in robots.txt (a robots.txt with only a `Sitemap:` record is a valid file under RFC 9309: it earns this point, but not the AI-crawler points) |
+| 4 | HTTPS (a real TLS connection) |
+| 4 | `llms-full.txt` present (real content, not a soft-404) |
+| 3 | `ai.txt` present |
+| 3 | `security.txt` present |
+| 3 | Agent hint file present (`/.well-known/agents.json`, `/agents.txt`, `/.well-known/ai.txt`) |
+| 3 | Sitemap declared in robots.txt (a robots.txt with only a `Sitemap:` record is a valid file under RFC 9309: it earns this point, but not the AI-crawler points) |
 
 The table mirrors the `add(...)` calls in `scan.mjs`, which sum to 93. The weights are opinionated and public: edit them in `scan.mjs` and argue with them.
 
